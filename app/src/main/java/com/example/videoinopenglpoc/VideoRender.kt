@@ -20,6 +20,8 @@ import javax.microedition.khronos.opengles.GL10
 class VideoRenderer(private val context: Context, private val glSurfaceView: GLSurfaceView) :
     GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
 
+    private val TAG = "===rode===VideoRenderer"
+
     private lateinit var surfaceTexture: SurfaceTexture
     var mediaPlayer: MediaPlayer? = null
 
@@ -134,12 +136,16 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         val scaleX = finalWidth / viewWidth
         val scaleY = finalHeight / viewHeight
 
+        Log.d(TAG, "scaleX=$scaleX, scaleY=$scaleY")
+
         // 4. Calculate translation to center the corrected video inside the original targetRect
         val targetCenterX_view = targetRect.left + targetRect.width() / 2.0f
         val targetCenterY_view = targetRect.top + targetRect.height() / 2.0f
+        Log.d(TAG, "targetCenterX_view=$targetCenterX_view, targetCenterY_view=$targetCenterY_view")
 
         val translateX_ndc = (targetCenterX_view / viewWidth) * 2.0f - 1.0f
         val translateY_ndc = -((targetCenterY_view / viewHeight) * 2.0f - 1.0f)
+        Log.d(TAG, "translateX_ndc=$translateX_ndc, translateY_ndc=$translateY_ndc")
 
         // 5. Build the final matrix
         Matrix.setIdentityM(mvpMatrix, 0)
@@ -149,6 +155,7 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
 
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        Log.d(TAG, "onSurfaceCreated")
         // 1. 載入並編譯 Shaders
         val vertexShaderSource = readShaderFromAssets("video_vertex_shader.glsl")
         val fragmentShaderSource = readShaderFromAssets("video_fragment_shader.glsl")
@@ -198,6 +205,7 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         mediaPlayer = MediaPlayer()
         try {
             val afd = context.resources.openRawResourceFd(R.raw.cat)
+            //val afd = context.resources.openRawResourceFd(R.raw.microscope)
             mediaPlayer?.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
             afd.close()
             mediaPlayer?.setSurface(surface)
@@ -224,7 +232,7 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
 
     //GLSurfaceView.Renderer
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
-
+        Log.d(TAG, "onSurfaceChanged: $width x $height")
         GLES20.glViewport(0, 0, width, height)
         this.viewWidth = width
         this.viewHeight = height

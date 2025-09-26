@@ -10,42 +10,28 @@
         android:id="@+id/glSurfaceView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"/>
+
+    <FrameLayout
+        android:id="@+id/frameLayout"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="@+id/glSurfaceView"
+        app:layout_constraintEnd_toEndOf="@+id/glSurfaceView"
+        app:layout_constraintStart_toStartOf="@+id/glSurfaceView"
+        app:layout_constraintTop_toTopOf="@+id/glSurfaceView"
+        android:background="@drawable/rectangular_frame"/>
+
+    <Spinner
+        android:id="@+id/spinner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:backgroundTint="@color/white"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:background="#80000000"
-        app:layout_constraintBottom_toBottomOf="parent">
-
-        <Button
-            android:id="@+id/btnFullscreen"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="全螢幕"/>
-
-        <Button
-            android:id="@+id/btnTopLeft"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="左上角"/>
-
-        <Button
-            android:id="@+id/btnShift"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="動態平移"/>
-
-        <Button
-            android:id="@+id/btnZoomPan"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="縮放平移"/>
-    </LinearLayout>
+        app:layout_constraintTop_toTopOf="parent"
+        android:elevation="3dp"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
