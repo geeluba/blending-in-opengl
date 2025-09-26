@@ -6,23 +6,6 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <android.opengl.GLSurfaceView
-        android:id="@+id/glSurfaceView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"/>
-
-    <FrameLayout
-        android:id="@+id/frameLayout"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:layout_constraintBottom_toBottomOf="@+id/glSurfaceView"
-        app:layout_constraintEnd_toEndOf="@+id/glSurfaceView"
-        app:layout_constraintStart_toStartOf="@+id/glSurfaceView"
-        app:layout_constraintTop_toTopOf="@+id/glSurfaceView"
-        android:background="@drawable/rectangular_frame"/>
-
     <Spinner
         android:id="@+id/spinner"
         android:layout_width="wrap_content"

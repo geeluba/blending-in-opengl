@@ -135,6 +135,7 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         // 3. Calculate scale based on the *corrected* dimensions
         val scaleX = finalWidth / viewWidth
         val scaleY = finalHeight / viewHeight
+        Log.d(TAG, "viewWidth=$viewWidth, viewHeight=$viewHeight, finalWidth=$finalWidth, finalHeight=$finalHeight")
 
         Log.d(TAG, "scaleX=$scaleX, scaleY=$scaleY")
 
@@ -206,6 +207,7 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         try {
             val afd = context.resources.openRawResourceFd(R.raw.cat)
             //val afd = context.resources.openRawResourceFd(R.raw.microscope)
+            //val afd = context.resources.openRawResourceFd(R.raw.skynight)
             mediaPlayer?.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
             afd.close()
             mediaPlayer?.setSurface(surface)

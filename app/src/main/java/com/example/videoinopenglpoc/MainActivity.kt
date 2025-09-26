@@ -12,13 +12,16 @@ import android.widget.ArrayAdapter
 import android.widget.FrameLayout
 import com.example.videoinopenglpoc.MainActivity.DisplayMode.leftHalf
 import com.example.videoinopenglpoc.MainActivity.DisplayMode.rightHalf
+import com.example.videoinopenglpoc.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
 
     private val TAG = "===rode===MainActivity"
-    private lateinit var glSurfaceView: GLSurfaceView
-    private lateinit var frameLayout: FrameLayout
-    private lateinit var videoRenderer: VideoRenderer
+
+    private lateinit var binding: ActivityMainBinding
+    private var glSurfaceView: GLSurfaceView? = null
+    private var frameLayout: FrameLayout? = null
+    private var videoRenderer: VideoRenderer? = null
 
     //physical displayed area on wall
     private var virtualCombinedRectF = RectF(0f, 0f, 200f, 200f)
@@ -33,19 +36,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         hideSystemUi()
-
-        glSurfaceView = findViewById(R.id.glSurfaceView)
-        glSurfaceView.setEGLContextClientVersion(2)
-
-        videoRenderer = VideoRenderer(this, glSurfaceView)
-        glSurfaceView.setRenderer(videoRenderer)
-        glSurfaceView.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
-        glSurfaceView.visibility = View.GONE
-
-        frameLayout = findViewById(R.id.frameLayout)
 
         initSpinner()
     }
@@ -71,7 +65,8 @@ class MainActivity : AppCompatActivity() {
                     when (currentDisplayMode) {
 
                         leftHalf, rightHalf -> {
-                            showVideoView()
+                            removeVideoView()
+                            addVideoView()
                         }
 
                         DisplayMode.None -> {
@@ -87,13 +82,18 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    private fun showVideoView() {
+    private fun addVideoView() {
+        Log.d(TAG, "addVideoView")
 
-        if (glSurfaceView.visibility == View.GONE) {
-            glSurfaceView.visibility = View.VISIBLE
-        } else {
-            videoRenderer.mediaPlayer?.pause()
-        }
+        //init glSurfaceView and VideoRenderer
+        glSurfaceView = GLSurfaceView(this)
+        glSurfaceView?.setEGLContextClientVersion(2)
+        videoRenderer = VideoRenderer(this, glSurfaceView!!)
+        glSurfaceView?.setRenderer(videoRenderer)
+        glSurfaceView?.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+
+        //init frameLayout
+        frameLayout = FrameLayout(this)
 
         val (screenWidth, screenHeight) = getScreenResolution()
 
@@ -107,7 +107,8 @@ class MainActivity : AppCompatActivity() {
             "Original Screen: width = ${screenWidth}, height=${screenHeight} and largest available screen: width=$availableWidth, height=$availableHeight"
         )
 
-        glSurfaceView.let { gv ->
+        glSurfaceView?.let { gv ->
+            binding.root.addView(gv)
             gv.layoutParams.width = availableWidth
             gv.layoutParams.height = availableHeight
             gv.x = currentDisplayMode.let {
@@ -118,10 +119,11 @@ class MainActivity : AppCompatActivity() {
             }
             gv.y = (screenHeight - availableHeight).toFloat()
             gv.y = (screenHeight - availableHeight).toFloat()
-            Log.d(TAG, "glSurfaceView x=${glSurfaceView.x}, y=${glSurfaceView.y}")
+            Log.d(TAG, "glSurfaceView x=${glSurfaceView!!.x}, y=${glSurfaceView!!.y}")
         }
 
-        frameLayout.let { fl ->
+        frameLayout?.let { fl ->
+            binding.root.addView(fl)
             fl.layoutParams.width = availableWidth
             fl.layoutParams.height = availableHeight
             fl.x = currentDisplayMode.let {
@@ -131,6 +133,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             fl.y = (screenHeight - availableHeight).toFloat()
+            fl.background = getDrawable(R.drawable.rectangular_frame)
         }
 
         //compute the virtual combined rectF
@@ -154,7 +157,25 @@ class MainActivity : AppCompatActivity() {
             availableHeight.toFloat()
         )
         Log.d(TAG, "virtualCombinedRectF=$virtualCombinedRectF")
-        videoRenderer.setVideoRect(virtualCombinedRectF)
+        videoRenderer?.setVideoRect(virtualCombinedRectF)
+    }
+
+    private fun removeVideoView() {
+        Log.d(TAG, "removeVideoView")
+
+        glSurfaceView?.let { gv ->
+            gv.onPause()
+            gv.queueEvent {
+                videoRenderer?.cleanup()
+            }
+            binding.root.removeView(gv)
+            glSurfaceView = null
+            videoRenderer = null
+        }
+        frameLayout?.let { fl ->
+            binding.root.removeView(fl)
+            frameLayout = null
+        }
     }
 
     private fun hideSystemUi() {
@@ -214,19 +235,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        //glSurfaceView.onPause()
-        //videoRenderer.mediaPlayer?.pause()
     }
 
     override fun onResume() {
         super.onResume()
-        //glSurfaceView.onResume()
-        //videoRenderer.mediaPlayer?.start()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        videoRenderer.cleanup()
     }
 
     companion object {
