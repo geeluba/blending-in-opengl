@@ -53,6 +53,7 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
     // 保存 GLSurfaceView 的尺寸
     private var viewWidth: Int = 0
     private var viewHeight: Int = 0
+
     // 保存目標位置和大小 (View 座標)
     private var targetRect = RectF(0f, 0f, 0f, 0f)
 
@@ -60,8 +61,8 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         // x,  y, z
         -1.0f, -1.0f, 0.0f, // Bottom-left
         1.0f, -1.0f, 0.0f, // Bottom-right
-        -1.0f,  1.0f, 0.0f, // Top-left
-        1.0f,  1.0f, 0.0f  // Top-right
+        -1.0f, 1.0f, 0.0f, // Top-left
+        1.0f, 1.0f, 0.0f  // Top-right
     )
 
     private val texCoords = floatArrayOf(
@@ -168,10 +169,26 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         videoTextureId = textures[0]
 
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, videoTextureId)
-        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST)
-        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST)
-        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
-        GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+        GLES20.glTexParameteri(
+            GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+            GLES20.GL_TEXTURE_MIN_FILTER,
+            GLES20.GL_NEAREST
+        )
+        GLES20.glTexParameteri(
+            GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+            GLES20.GL_TEXTURE_MAG_FILTER,
+            GLES20.GL_NEAREST
+        )
+        GLES20.glTexParameteri(
+            GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+            GLES20.GL_TEXTURE_WRAP_S,
+            GLES20.GL_CLAMP_TO_EDGE
+        )
+        GLES20.glTexParameteri(
+            GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+            GLES20.GL_TEXTURE_WRAP_T,
+            GLES20.GL_CLAMP_TO_EDGE
+        )
 
         surfaceTexture = SurfaceTexture(videoTextureId)
         surfaceTexture.setOnFrameAvailableListener(this)
@@ -241,7 +258,14 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
 
         // 啟用並傳遞紋理座標數據
         GLES20.glEnableVertexAttribArray(aTexCoordLocation)
-        GLES20.glVertexAttribPointer(aTexCoordLocation, 2, GLES20.GL_FLOAT, false, 8, texCoordBuffer)
+        GLES20.glVertexAttribPointer(
+            aTexCoordLocation,
+            2,
+            GLES20.GL_FLOAT,
+            false,
+            8,
+            texCoordBuffer
+        )
 
         // 傳遞矩陣
         GLES20.glUniformMatrix4fv(uMVPMatrixLocation, 1, false, mvpMatrix, 0)
