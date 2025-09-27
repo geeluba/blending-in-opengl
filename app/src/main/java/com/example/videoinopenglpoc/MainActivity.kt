@@ -1,6 +1,8 @@
 package com.example.videoinopenglpoc
 
+import android.graphics.PixelFormat
 import android.graphics.RectF
+import android.graphics.drawable.ColorDrawable
 import android.opengl.GLSurfaceView
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
@@ -87,6 +89,14 @@ class MainActivity : AppCompatActivity() {
 
         //init glSurfaceView and VideoRenderer
         glSurfaceView = GLSurfaceView(this)
+        //tried below, seems not necessary
+        // 1. We need a surface with an Alpha channel. 8 bits for RGBA.
+        //glSurfaceView?.setEGLConfigChooser(8, 8, 8, 8, 16, 0)
+        // 2. Tell the system that this surface is going to be drawn on top of other things.
+        //glSurfaceView?.setZOrderOnTop(true)
+        // 3. Tell the SurfaceHolder to create a translucent surface.
+        //glSurfaceView?.holder?.setFormat(PixelFormat.TRANSLUCENT)
+
         glSurfaceView?.setEGLContextClientVersion(2)
         videoRenderer = VideoRenderer(this, glSurfaceView!!)
         glSurfaceView?.setRenderer(videoRenderer)
@@ -119,6 +129,9 @@ class MainActivity : AppCompatActivity() {
             }
             gv.y = (screenHeight - availableHeight).toFloat()
             gv.y = (screenHeight - availableHeight).toFloat()
+            //tried below, seems not necessary
+            //gv.background = ColorDrawable(android.graphics.Color.TRANSPARENT)
+            //gv.background = null
             Log.d(TAG, "glSurfaceView x=${glSurfaceView!!.x}, y=${glSurfaceView!!.y}")
         }
 
@@ -158,6 +171,20 @@ class MainActivity : AppCompatActivity() {
         )
         Log.d(TAG, "virtualCombinedRectF=$virtualCombinedRectF")
         videoRenderer?.setVideoRect(virtualCombinedRectF)
+        val rectWidth = availableWidth / 2f
+        val rectHeight = availableHeight / 2f
+
+        val rectLeft = (availableWidth - rectWidth) / 2f
+        val rectTop = (availableHeight - rectHeight) / 2f
+
+        val blendingRectF = RectF(
+            rectLeft,
+            rectTop,
+            rectLeft + rectWidth,
+            rectTop + rectHeight
+        )
+        videoRenderer?.setBlendRect(blendingRectF, 0.8f)
+        Log.d(TAG, "blendingRectF=$blendingRectF")
     }
 
     private fun removeVideoView() {

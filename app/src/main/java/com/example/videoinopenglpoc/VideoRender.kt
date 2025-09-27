@@ -75,6 +75,22 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         1.0f, 1.0f  // Top-right
     )
 
+    // --- NEW PROPERTIES FOR BLENDING ---
+    private var uBlendRectLocation: Int = 0
+    private var uBlendAlphaLocation: Int = 0
+    // (minX, minY, maxX, maxY) in normalized screen coordinates (Y is up)
+    private val blendRectNormalized = floatArrayOf(0f, 0f, 0f, 0f)
+    private var blendAlpha = 1.0f // Default to fully opaque
+
+    private var uResolutionLocation: Int = 0
+    private val resolution = floatArrayOf(0f, 0f)
+
+    @Volatile
+    private var isSurfaceReady = false
+    private var pendingBlendRect: RectF? = null
+    private var pendingBlendAlpha: Float = 1.0f
+
+
     init {
         vertexBuffer = ByteBuffer.allocateDirect(vertices.size * 4)
             .order(ByteOrder.nativeOrder())
@@ -157,6 +173,9 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         Log.d(TAG, "onSurfaceCreated")
+        // --- ENABLE BLENDING ---
+        GLES20.glEnable(GLES20.GL_BLEND)
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
         // 1. 載入並編譯 Shaders
         val vertexShaderSource = readShaderFromAssets("video_vertex_shader.glsl")
         val fragmentShaderSource = readShaderFromAssets("video_fragment_shader.glsl")
@@ -170,6 +189,9 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         uMVPMatrixLocation = GLES20.glGetUniformLocation(programHandle, "uMVPMatrix")
         uTexMatrixLocation = GLES20.glGetUniformLocation(programHandle, "uTexMatrix")
         sTextureLocation = GLES20.glGetUniformLocation(programHandle, "sTexture")
+        uBlendRectLocation = GLES20.glGetUniformLocation(programHandle, "uBlendRect")
+        uBlendAlphaLocation = GLES20.glGetUniformLocation(programHandle, "uBlendAlpha")
+        uResolutionLocation = GLES20.glGetUniformLocation(programHandle, "uResolution")
 
         // 3. 建立 OpenGL 紋理並綁定到 SurfaceTexture
         val textures = IntArray(1)
@@ -239,9 +261,19 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         this.viewWidth = width
         this.viewHeight = height
 
+        resolution[0] = width.toFloat()
+        resolution[1] = height.toFloat()
+
         // 首次進入時，設定影片為全螢幕
         if (targetRect.width() == 0f || targetRect.height() == 0f) {
             targetRect.set(0f, 0f, width.toFloat(), height.toFloat())
+        }
+
+       isSurfaceReady = true
+        if (pendingBlendRect != null) {
+            updateBlendRect(pendingBlendRect, pendingBlendAlpha)
+            // Clear the pending request so it doesn't get applied again
+            pendingBlendRect = null
         }
 
         // 更新 MVP 矩陣
@@ -259,6 +291,9 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
 
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+        //tried below, seems not necessary
+        //GLES20.glClearColor(0.0f, 0.0f, 0.0f, 0.0f)
+
 
         GLES20.glUseProgram(programHandle)
 
@@ -280,6 +315,11 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         // 傳遞矩陣
         GLES20.glUniformMatrix4fv(uMVPMatrixLocation, 1, false, mvpMatrix, 0)
         GLES20.glUniformMatrix4fv(uTexMatrixLocation, 1, false, textureTransformMatrix, 0)
+
+        // --- Pass blending uniforms to the shader ---
+        GLES20.glUniform2fv(uResolutionLocation, 1, resolution, 0)
+        GLES20.glUniform4fv(uBlendRectLocation, 1, blendRectNormalized, 0)
+        GLES20.glUniform1f(uBlendAlphaLocation, blendAlpha)
 
         // 綁定紋理
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -335,6 +375,60 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
             return 0
         }
         return program
+    }
+
+    // --- NEW PUBLIC METHOD ---
+    /**
+     * Specifies a rectangle in view coordinates for alpha blending.
+     * @param rect The rectangle in view coordinates (Y-down). If null, blending is disabled.
+     * @param alpha The alpha value to apply within the rect (0.0 to 1.0).
+     */
+    /*fun setBlendRect(rect: RectF?, alpha: Float) {
+        glSurfaceView.queueEvent {
+            if (rect == null || viewWidth == 0 || viewHeight == 0) {
+                // Disable blending by setting a zero-sized rect
+                blendRectNormalized.fill(0f)
+            } else {
+                // Convert view coordinates (Y-down) to normalized screen coordinates (Y-up)
+                blendRectNormalized[0] = rect.left / viewWidth   // minX
+                blendRectNormalized[1] = 1.0f - rect.bottom / viewHeight // minY
+                blendRectNormalized[2] = rect.right / viewWidth  // maxX
+                blendRectNormalized[3] = 1.0f - rect.top / viewHeight    // maxY
+            }
+            this.blendAlpha = alpha
+            glSurfaceView.requestRender()
+        }
+    }*/
+    fun setBlendRect(rect: RectF?, alpha: Float) {
+        // If the surface isn't ready yet, just cache the request.
+        if (!isSurfaceReady) {
+            Log.d(TAG, "Surface not ready, caching blend rect request")
+            // Create a copy of the rect to avoid threading issues
+            pendingBlendRect = if (rect != null) RectF(rect) else null
+            pendingBlendAlpha = alpha
+            return
+        }
+
+        // If the surface IS ready, queue the event to run on the GL thread as before.
+        glSurfaceView.queueEvent {
+            updateBlendRect(rect, alpha)
+            glSurfaceView.requestRender()
+        }
+    }
+
+    // --- Private Helper Method ---
+    // This contains the actual logic, now callable from multiple places.
+    private fun updateBlendRect(rect: RectF?, alpha: Float) {
+        if (rect == null || viewWidth == 0 || viewHeight == 0) {
+            blendRectNormalized.fill(0f)
+        } else {
+            // Convert view coordinates (Y-down) to normalized screen coordinates (Y-up)
+            blendRectNormalized[0] = rect.left / viewWidth
+            blendRectNormalized[1] = 1.0f - rect.bottom / viewHeight
+            blendRectNormalized[2] = rect.right / viewWidth
+            blendRectNormalized[3] = 1.0f - rect.top / viewHeight
+        }
+        this.blendAlpha = alpha
     }
 
     fun cleanup() {
