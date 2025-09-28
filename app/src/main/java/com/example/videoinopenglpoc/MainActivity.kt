@@ -2,7 +2,6 @@ package com.example.videoinopenglpoc
 
 import android.graphics.PixelFormat
 import android.graphics.RectF
-import android.graphics.drawable.ColorDrawable
 import android.opengl.GLSurfaceView
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
@@ -25,6 +24,7 @@ class MainActivity : AppCompatActivity() {
     private var frameLayout: FrameLayout? = null
     private var videoRenderer: VideoRenderer? = null
 
+    private var imageRenderer: ImageRenderer? = null
     //physical displayed area on wall
     private var virtualCombinedRectF = RectF(0f, 0f, 200f, 200f)
 
@@ -67,8 +67,8 @@ class MainActivity : AppCompatActivity() {
                     when (currentDisplayMode) {
 
                         leftHalf, rightHalf -> {
-                            removeVideoView()
-                            addVideoView()
+                            removeRenderView()
+                            addRenderView()
                         }
 
                         DisplayMode.None -> {
@@ -84,11 +84,12 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    private fun addVideoView() {
-        Log.d(TAG, "addVideoView")
+    private fun addRenderView() {
+        Log.d(TAG, "addRenderView+++")
 
-        //init glSurfaceView and VideoRenderer
+        //init glSurfaceView and VideoRenderer/ImageRenderer
         glSurfaceView = GLSurfaceView(this)
+        glSurfaceView?.setEGLContextClientVersion(2)
         //tried below, seems not necessary
         // 1. We need a surface with an Alpha channel. 8 bits for RGBA.
         //glSurfaceView?.setEGLConfigChooser(8, 8, 8, 8, 16, 0)
@@ -97,10 +98,15 @@ class MainActivity : AppCompatActivity() {
         // 3. Tell the SurfaceHolder to create a translucent surface.
         //glSurfaceView?.holder?.setFormat(PixelFormat.TRANSLUCENT)
 
-        glSurfaceView?.setEGLContextClientVersion(2)
-        videoRenderer = VideoRenderer(this, glSurfaceView!!)
-        glSurfaceView?.setRenderer(videoRenderer)
-        glSurfaceView?.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+        if (loadIamge) {
+            imageRenderer = ImageRenderer(this, glSurfaceView!!)
+            glSurfaceView?.setRenderer(imageRenderer)
+            glSurfaceView?.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+        } else {
+            videoRenderer = VideoRenderer(this, glSurfaceView!!)
+            glSurfaceView?.setRenderer(videoRenderer)
+            glSurfaceView?.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+        }
 
         //init frameLayout
         frameLayout = FrameLayout(this)
@@ -170,7 +176,11 @@ class MainActivity : AppCompatActivity() {
             availableHeight.toFloat()
         )
         Log.d(TAG, "virtualCombinedRectF=$virtualCombinedRectF")
-        videoRenderer?.setVideoRect(virtualCombinedRectF)
+        if (loadIamge) {
+            imageRenderer?.setImageRect(virtualCombinedRectF)
+        } else {
+            videoRenderer?.setVideoRect(virtualCombinedRectF)
+        }
         val rectWidth = availableWidth / 2f
         val rectHeight = availableHeight / 2f
 
@@ -183,26 +193,37 @@ class MainActivity : AppCompatActivity() {
             rectLeft + rectWidth,
             rectTop + rectHeight
         )
-        videoRenderer?.setBlendRect(blendingRectF, 0.8f)
+        if (loadIamge) {
+            imageRenderer?.setBlendRect(blendingRectF, 0.8f)
+        } else {
+            videoRenderer?.setBlendRect(blendingRectF, 0.8f)
+        }
         Log.d(TAG, "blendingRectF=$blendingRectF")
+        Log.d(TAG, "addRenderView---")
     }
 
-    private fun removeVideoView() {
-        Log.d(TAG, "removeVideoView")
+    private fun removeRenderView() {
+        Log.d(TAG, "removeRenderView+++")
 
         glSurfaceView?.let { gv ->
             gv.onPause()
             gv.queueEvent {
-                videoRenderer?.cleanup()
+                if (loadIamge) {
+                    imageRenderer?.cleanup()
+                } else {
+                    videoRenderer?.cleanup()
+                }
             }
             binding.root.removeView(gv)
             glSurfaceView = null
             videoRenderer = null
+            imageRenderer = null
         }
         frameLayout?.let { fl ->
             binding.root.removeView(fl)
             frameLayout = null
         }
+        Log.d(TAG, "removeRenderView---")
     }
 
     private fun hideSystemUi() {
@@ -273,6 +294,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+
+        private val loadIamge = false    //otherwise load video
         private val singleProjectorAspectRatio = 12f / 9f
         private val singleProjectorOverlappingRatio = 3f / 12f
     }
