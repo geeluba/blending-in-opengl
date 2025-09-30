@@ -4,42 +4,46 @@ precision mediump float;
 varying vec2 vTexCoord;
 uniform samplerExternalOES sTexture;
 
-// Blend rectangle in normalized screen coords (minX, minY, maxX, maxY)
-uniform vec4 uBlendRect;
-// The alpha value to use inside the rectangle (e.g., 0.5 for 50% transparent)
-uniform float uBlendAlpha;
-//To hold the view's width and height
-uniform vec2 uResolution;
-
+// Blending uniforms
+uniform bool uIsLeft;
+uniform vec4 uBlendRect;      // Blend rectangle in normalized screen coords (minX, minY, maxX, maxY)
+uniform float uGamma;
+uniform float uAlpha;
+uniform vec2 uResolution;     // View resolution (width, height)
 
 void main() {
-    vec4 videoColor = texture2D(sTexture, vTexCoord);
+    vec4 textureColor = texture2D(sTexture, vTexCoord);
+    float blendFactor = 1.0;
 
-    // NEW: Calculate normalized screen coordinates directly from gl_FragCoord
+    // Normalize fragment coordinates to [0, 1] range
     vec2 normalizedScreenCoord = gl_FragCoord.xy / uResolution.xy;
 
-    // Check if the rectangle is valid (width > 0)
-    if (uBlendRect.z > uBlendRect.x) {
-        // Use the new, reliable coordinate for the check
-        bool inRectX = normalizedScreenCoord.x > uBlendRect.x && normalizedScreenCoord.x < uBlendRect.z;
+    // Check if the fragment is inside the blend rectangle
+    bool inRectX = normalizedScreenCoord.x >= uBlendRect.x && normalizedScreenCoord.x <= uBlendRect.z;
+    bool inRectY = normalizedScreenCoord.y >= uBlendRect.y && normalizedScreenCoord.y <= uBlendRect.w;
 
-        // Note: The Y coordinate of gl_FragCoord is Y-up, same as our normalized rect.
-        bool inRectY = normalizedScreenCoord.y > uBlendRect.y && normalizedScreenCoord.y < uBlendRect.w;
+    if (uBlendRect.z > uBlendRect.x && inRectX && inRectY) {
+        // Calculate the blend factor based on horizontal position within the rect
+        float horizontalPosInRect = (normalizedScreenCoord.x - uBlendRect.x) / (uBlendRect.z - uBlendRect.x);
 
-        if (inRectX && inRectY) {
-            // Use the robust alpha assignment
-            videoColor.a = uBlendAlpha;
+        if (uIsLeft) {
+            // Left projector: fade from 1.0 down to 0.0 across the blend rect
+            blendFactor = 1.0 - horizontalPosInRect;
         } else {
-            videoColor.a = 1.0; // Fully opaque outside the rectangle
+            // Right projector: fade from 0.0 up to 1.0 across the blend rect
+            blendFactor = horizontalPosInRect;
         }
-        gl_FragColor = videoColor;
     }
+
+    // 1. Convert color to linear space
+    vec3 linearColor = pow(textureColor.rgb, vec3(uGamma));
+
+    // 2. Apply blend factor in linear space
+    vec3 blendedLinearColor = linearColor * blendFactor;
+
+    // 3. Convert back to gamma-encoded space for display
+    vec3 finalGammaColor = pow(blendedLinearColor, vec3(1.0 / uGamma));
+
+    // 4. Apply final alpha
+    gl_FragColor = vec4(finalGammaColor, textureColor.a * blendFactor * uAlpha);
 }
-
-//testing code
-/*void main() {
-    vec4 videoColor = texture2D(sTexture, vTexCoord);
-
-    // TEMPORARY TEST: Force every pixel to be semi-transparent
-    gl_FragColor = vec4(videoColor.rgb, 0.2);
-}*/

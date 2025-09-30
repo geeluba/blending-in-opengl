@@ -30,6 +30,8 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
     private var uMVPMatrixLocation: Int = 0
     private var sTextureLocation: Int = 0
 
+    private var uIsLeftLocation: Int = 0
+
     // Buffers for vertex and texture coordinates
     private val vertexBuffer: FloatBuffer
     private val texCoordBuffer: FloatBuffer
@@ -64,9 +66,12 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
 
     // Blending properties
     private var uBlendRectLocation: Int = 0
-    private var uBlendAlphaLocation: Int = 0
+
+    private var uGammaLocation: Int = 0
+    private var uAlphaLocation: Int = 0
+    //private var uBlendAlphaLocation: Int = 0
     private val blendRectNormalized = floatArrayOf(0f, 0f, 0f, 0f)
-    private var blendAlpha = 1.0f
+
 
     private var uResolutionLocation: Int = 0
     private val resolution = floatArrayOf(0f, 0f)
@@ -74,7 +79,12 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
     @Volatile
     private var isSurfaceReady = false
     private var pendingBlendRect: RectF? = null
+    private var blendAlpha = 1.0f
     private var pendingBlendAlpha: Float = 1.0f
+    private var blendGamma: Float = 1.0f
+    private var pendingBlendGamma: Float = 1.0f
+    private var isLeft: Boolean = true
+    private var pendingisLeft: Boolean = true
 
     init {
         vertexBuffer = ByteBuffer.allocateDirect(vertices.size * 4)
@@ -147,9 +157,12 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
         aTexCoordLocation = GLES20.glGetAttribLocation(programHandle, "aTexCoord")
         uMVPMatrixLocation = GLES20.glGetUniformLocation(programHandle, "uMVPMatrix")
         sTextureLocation = GLES20.glGetUniformLocation(programHandle, "sTexture")
+        uIsLeftLocation = GLES20.glGetUniformLocation(programHandle, "uIsLeft")
         uBlendRectLocation = GLES20.glGetUniformLocation(programHandle, "uBlendRect")
-        uBlendAlphaLocation = GLES20.glGetUniformLocation(programHandle, "uBlendAlpha")
+        uGammaLocation = GLES20.glGetUniformLocation(programHandle, "uGamma")
+        uAlphaLocation = GLES20.glGetUniformLocation(programHandle, "uAlpha")
         uResolutionLocation = GLES20.glGetUniformLocation(programHandle, "uResolution")
+
 
         // Load image and create texture
         loadImageTexture()
@@ -223,7 +236,7 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
 
         isSurfaceReady = true
         if (pendingBlendRect != null) {
-            updateBlendRect(pendingBlendRect, pendingBlendAlpha)
+            updateBlendConfig(pendingisLeft, pendingBlendRect!!, pendingBlendGamma, pendingBlendAlpha)
             pendingBlendRect = null
         }
 
@@ -256,8 +269,11 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
 
         // Pass blending uniforms
         GLES20.glUniform2fv(uResolutionLocation, 1, resolution, 0)
+        GLES20.glUniform1i(uIsLeftLocation, if (isLeft) 1 else 0)
         GLES20.glUniform4fv(uBlendRectLocation, 1, blendRectNormalized, 0)
-        GLES20.glUniform1f(uBlendAlphaLocation, blendAlpha)
+        GLES20.glUniform1f(uGammaLocation, blendGamma)
+        GLES20.glUniform1f(uAlphaLocation, blendAlpha)
+        //GLES20.glUniform1f(uBlendAlphaLocation, blendAlpha)
 
         // Bind texture
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -271,30 +287,36 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
         GLES20.glDisableVertexAttribArray(aTexCoordLocation)
     }
 
-    fun setBlendRect(rect: RectF?, alpha: Float) {
+    fun setBlendConfig(isLeft: Boolean, blendRect: RectF, gamma: Float, alpha: Float) {
+        Log.d(TAG, "setBlendConfig called with rect: $blendRect, gamma: $gamma, alpha: $alpha, isLeft: $isLeft")
         if (!isSurfaceReady) {
             Log.d(TAG, "Surface not ready, caching blend rect request")
-            pendingBlendRect = if (rect != null) RectF(rect) else null
+            pendingBlendRect = if (blendRect != null) RectF(blendRect) else null
             pendingBlendAlpha = alpha
+            pendingBlendGamma = gamma
+            pendingisLeft = isLeft
             return
         }
 
         glSurfaceView.queueEvent {
-            updateBlendRect(rect, alpha)
+            updateBlendConfig(isLeft, blendRect, gamma, alpha)
             glSurfaceView.requestRender()
         }
     }
 
-    private fun updateBlendRect(rect: RectF?, alpha: Float) {
-        if (rect == null || viewWidth == 0 || viewHeight == 0) {
-            blendRectNormalized.fill(0f)
-        } else {
-            blendRectNormalized[0] = rect.left / viewWidth
-            blendRectNormalized[1] = 1.0f - rect.bottom / viewHeight
-            blendRectNormalized[2] = rect.right / viewWidth
-            blendRectNormalized[3] = 1.0f - rect.top / viewHeight
+    fun updateBlendConfig(isLeft: Boolean, blendRect: RectF, gamma: Float, alpha: Float) {
+        glSurfaceView.queueEvent {
+            this.isLeft = isLeft
+            this.blendGamma = gamma
+            this.blendAlpha = alpha
+            if (viewWidth > 0 && viewHeight > 0) {
+                blendRectNormalized[0] = blendRect.left / viewWidth
+                blendRectNormalized[1] = 1.0f - blendRect.bottom / viewHeight
+                blendRectNormalized[2] = blendRect.right / viewWidth
+                blendRectNormalized[3] = 1.0f - blendRect.top / viewHeight
+            }
+            glSurfaceView.requestRender()
         }
-        this.blendAlpha = alpha
     }
 
     // Helper functions
@@ -337,5 +359,7 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
             GLES20.glDeleteTextures(1, textures, 0)
             imageTextureId = 0
         }
+        if (programHandle != 0) GLES20.glDeleteProgram(programHandle)
+        programHandle = 0
     }
 }

@@ -3,31 +3,51 @@ precision mediump float;
 varying vec2 vTexCoord;
 uniform sampler2D sTexture;
 
-// Blend rectangle in normalized screen coords (minX, minY, maxX, maxY)
-uniform vec4 uBlendRect;
-// The alpha value to use inside the rectangle (e.g., 0.5 for 50% transparent)
-uniform float uBlendAlpha;
-//To hold the view's width and height
-uniform vec2 uResolution;
+// Blending uniforms
+uniform bool uIsLeft;
+uniform vec4 uBlendRect;      // Blend rectangle in normalized screen coords (minX, minY, maxX, maxY)
+uniform float uGamma;
+uniform float uAlpha;
+uniform vec2 uResolution;     // View resolution (width, height)
 
 void main() {
-    vec4 imageColor = texture2D(sTexture, vTexCoord);
+    vec4 textureColor = texture2D(sTexture, vTexCoord);
+    float blendFactor = 1.0;
 
-    // Calculate normalized screen coordinates directly from gl_FragCoord
+    // Normalize fragment coordinates to [0, 1] range
     vec2 normalizedScreenCoord = gl_FragCoord.xy / uResolution.xy;
 
-    // Check if the rectangle is valid (width > 0)
-    if (uBlendRect.z > uBlendRect.x) {
-        bool inRectX = normalizedScreenCoord.x > uBlendRect.x && normalizedScreenCoord.x < uBlendRect.z;
-        bool inRectY = normalizedScreenCoord.y > uBlendRect.y && normalizedScreenCoord.y < uBlendRect.w;
+    // Check if the fragment is inside the blend rectangle
+    //.x = The left edge of the rectangle.
+    //.y = The bottom edge of the rectangle.
+    //.z = The right edge of the rectangle.
+    //.w = The top edge of the rectangle.
 
-        if (inRectX && inRectY) {
-            imageColor.a = uBlendAlpha;
+    bool inRectX = normalizedScreenCoord.x >= uBlendRect.x && normalizedScreenCoord.x <= uBlendRect.z;
+    bool inRectY = normalizedScreenCoord.y >= uBlendRect.y && normalizedScreenCoord.y <= uBlendRect.w;
+
+    if (uBlendRect.z > uBlendRect.x && inRectX && inRectY) {
+        // Calculate the blend factor based on horizontal position within the rect
+        float horizontalPosInRect = (normalizedScreenCoord.x - uBlendRect.x) / (uBlendRect.z - uBlendRect.x);
+
+        if (uIsLeft) {
+            // Left projector: fade from 1.0 down to 0.0 across the blend rect
+            blendFactor = 1.0 - horizontalPosInRect;
         } else {
-            imageColor.a = 1.0; // Fully opaque outside the rectangle
+            // Right projector: fade from 0.0 up to 1.0 across the blend rect
+            blendFactor = horizontalPosInRect;
         }
     }
-    
-    gl_FragColor = imageColor;
-}
 
+    // 1. Convert color to linear space
+    vec3 linearColor = pow(textureColor.rgb, vec3(uGamma));
+
+    // 2. Apply blend factor in linear space
+    vec3 blendedLinearColor = linearColor * blendFactor;
+
+    // 3. Convert back to gamma-encoded space for display
+    vec3 finalGammaColor = pow(blendedLinearColor, vec3(1.0 / uGamma));
+
+    // 4. Apply final alpha
+    gl_FragColor = vec4(finalGammaColor, textureColor.a * blendFactor * uAlpha);
+}

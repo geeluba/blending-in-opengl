@@ -181,7 +181,9 @@ class MainActivity : AppCompatActivity() {
         } else {
             videoRenderer?.setVideoRect(virtualCombinedRectF)
         }
-        val rectWidth = availableWidth / 2f
+
+        //testing area for blending (center)
+        /*val rectWidth = availableWidth / 2f
         val rectHeight = availableHeight / 2f
 
         val rectLeft = (availableWidth - rectWidth) / 2f
@@ -192,13 +194,43 @@ class MainActivity : AppCompatActivity() {
             rectTop,
             rectLeft + rectWidth,
             rectTop + rectHeight
+        )*/
+
+        val gamma = 2.2f
+        val alpha = 1.0f
+
+        //overlapping area on screen
+        var blendRecF = RectF(
+            when (currentDisplayMode) {
+                leftHalf -> (availableWidth - overlappingWidth) * 1f
+                else -> 0f
+            },
+            0f,
+            when (currentDisplayMode) {
+                leftHalf -> availableWidth * 1f
+                else -> overlappingWidth * 1f
+            },
+            availableHeight.toFloat()
         )
+
         if (loadIamge) {
-            imageRenderer?.setBlendRect(blendingRectF, 0.8f)
+            imageRenderer?.setImageRect(virtualCombinedRectF)
+            imageRenderer?.setBlendConfig(
+                isLeft = currentDisplayMode == leftHalf,
+                blendRect = blendRecF,
+                gamma = gamma,
+                alpha = alpha
+            )
         } else {
-            videoRenderer?.setBlendRect(blendingRectF, 0.8f)
+            //videoRenderer?.setBlendRect(blendingRectF, 0.8f)
+            videoRenderer?.setBlendConfig(
+                isLeft = currentDisplayMode == leftHalf,
+                blendRect = blendRecF,
+                gamma = gamma,
+                alpha = alpha
+            )
         }
-        Log.d(TAG, "blendingRectF=$blendingRectF")
+        Log.d(TAG, "blendingRectF=$blendRecF")
         Log.d(TAG, "addRenderView---")
     }
 
