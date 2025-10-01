@@ -15,11 +15,26 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
+import kotlin.div
+import kotlin.text.set
 
 class ImageRenderer(private val context: Context, private val glSurfaceView: GLSurfaceView) :
     GLSurfaceView.Renderer {
 
     private val TAG = "===rode===ImageRenderer"
+
+    // Edge blending configuration (simplified)
+    data class SrgbEdgeBlendConfig(
+        val rect: RectF,
+        val alpha: Float = 0.5f,
+        val mode: BlendMode = BlendMode.NONE
+    )
+
+    enum class BlendMode(val value: Int) {
+        NONE(0),
+        LEFT_EDGE(1),
+        RIGHT_EDGE(2)
+    }
 
     private var programHandle: Int = 0
     private var imageTextureId: Int = 0
@@ -66,8 +81,6 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
 
     // Blending properties
     private var uBlendRectLocation: Int = 0
-
-    private var uGammaLocation: Int = 0
     private var uAlphaLocation: Int = 0
     //private var uBlendAlphaLocation: Int = 0
     private val blendRectNormalized = floatArrayOf(0f, 0f, 0f, 0f)
@@ -81,10 +94,10 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
     private var pendingBlendRect: RectF? = null
     private var blendAlpha = 1.0f
     private var pendingBlendAlpha: Float = 1.0f
-    private var blendGamma: Float = 1.0f
-    private var pendingBlendGamma: Float = 1.0f
     private var isLeft: Boolean = true
     private var pendingisLeft: Boolean = true
+
+    private var pendingSrgbEdgeBlendConfig: SrgbEdgeBlendConfig? = null
 
     init {
         vertexBuffer = ByteBuffer.allocateDirect(vertices.size * 4)
@@ -159,7 +172,6 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
         sTextureLocation = GLES20.glGetUniformLocation(programHandle, "sTexture")
         uIsLeftLocation = GLES20.glGetUniformLocation(programHandle, "uIsLeft")
         uBlendRectLocation = GLES20.glGetUniformLocation(programHandle, "uBlendRect")
-        uGammaLocation = GLES20.glGetUniformLocation(programHandle, "uGamma")
         uAlphaLocation = GLES20.glGetUniformLocation(programHandle, "uAlpha")
         uResolutionLocation = GLES20.glGetUniformLocation(programHandle, "uResolution")
 
@@ -235,12 +247,21 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
         }
 
         isSurfaceReady = true
-        if (pendingBlendRect != null) {
-            updateBlendConfig(pendingisLeft, pendingBlendRect!!, pendingBlendGamma, pendingBlendAlpha)
-            pendingBlendRect = null
+        if (pendingSrgbEdgeBlendConfig != null) {
+            updateSrgbEdgeBlendConfig(pendingSrgbEdgeBlendConfig!!)
+            pendingSrgbEdgeBlendConfig = null
         }
 
+
         updateMVPMatrix()
+    }
+
+    // Backward compatibility method with sRGB handling
+    fun setBlendConfig(isLeft: Boolean, blendRect: RectF, gamma: Float, alpha: Float) {
+        // Note: gamma parameter is ignored as we use fixed sRGB conversion
+        val mode = if (isLeft) BlendMode.RIGHT_EDGE else BlendMode.LEFT_EDGE
+        val config = SrgbEdgeBlendConfig(blendRect, alpha, mode)
+        configureSrgbEdgeBlending(config)
     }
 
     override fun onDrawFrame(gl: GL10?) {
@@ -271,9 +292,7 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
         GLES20.glUniform2fv(uResolutionLocation, 1, resolution, 0)
         GLES20.glUniform1i(uIsLeftLocation, if (isLeft) 1 else 0)
         GLES20.glUniform4fv(uBlendRectLocation, 1, blendRectNormalized, 0)
-        GLES20.glUniform1f(uGammaLocation, blendGamma)
         GLES20.glUniform1f(uAlphaLocation, blendAlpha)
-        //GLES20.glUniform1f(uBlendAlphaLocation, blendAlpha)
 
         // Bind texture
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -287,37 +306,38 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
         GLES20.glDisableVertexAttribArray(aTexCoordLocation)
     }
 
-    fun setBlendConfig(isLeft: Boolean, blendRect: RectF, gamma: Float, alpha: Float) {
-        Log.d(TAG, "setBlendConfig called with rect: $blendRect, gamma: $gamma, alpha: $alpha, isLeft: $isLeft")
+    // New sRGB-aware edge blending configuration
+    fun configureSrgbEdgeBlending(config: SrgbEdgeBlendConfig) {
         if (!isSurfaceReady) {
-            Log.d(TAG, "Surface not ready, caching blend rect request")
-            pendingBlendRect = if (blendRect != null) RectF(blendRect) else null
-            pendingBlendAlpha = alpha
-            pendingBlendGamma = gamma
-            pendingisLeft = isLeft
+            pendingSrgbEdgeBlendConfig = config
             return
         }
 
         glSurfaceView.queueEvent {
-            updateBlendConfig(isLeft, blendRect, gamma, alpha)
+            updateSrgbEdgeBlendConfig(config)
             glSurfaceView.requestRender()
         }
     }
 
-    fun updateBlendConfig(isLeft: Boolean, blendRect: RectF, gamma: Float, alpha: Float) {
-        glSurfaceView.queueEvent {
-            this.isLeft = isLeft
-            this.blendGamma = gamma
-            this.blendAlpha = alpha
-            if (viewWidth > 0 && viewHeight > 0) {
-                blendRectNormalized[0] = blendRect.left / viewWidth
-                blendRectNormalized[1] = 1.0f - blendRect.bottom / viewHeight
-                blendRectNormalized[2] = blendRect.right / viewWidth
-                blendRectNormalized[3] = 1.0f - blendRect.top / viewHeight
-            }
-            glSurfaceView.requestRender()
+    private fun updateSrgbEdgeBlendConfig(config: SrgbEdgeBlendConfig) {
+        if (viewWidth == 0 || viewHeight == 0) return
+
+        // Update blend rectangle
+        blendRectNormalized[0] = config.rect.left / viewWidth
+        blendRectNormalized[1] = 1.0f - config.rect.bottom / viewHeight
+        blendRectNormalized[2] = config.rect.right / viewWidth
+        blendRectNormalized[3] = 1.0f - config.rect.top / viewHeight
+
+        // Update parameters
+        blendAlpha = config.alpha
+        isLeft = when (config.mode) {
+            BlendMode.LEFT_EDGE -> false  // Right projector blending left edge
+            BlendMode.RIGHT_EDGE -> true  // Left projector blending right edge
+            else -> true
         }
     }
+
+
 
     // Helper functions
     private fun readShaderFromAssets(fileName: String): String {

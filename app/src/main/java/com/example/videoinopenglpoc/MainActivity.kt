@@ -215,12 +215,16 @@ class MainActivity : AppCompatActivity() {
 
         if (loadIamge) {
             imageRenderer?.setImageRect(virtualCombinedRectF)
-            imageRenderer?.setBlendConfig(
-                isLeft = currentDisplayMode == leftHalf,
-                blendRect = blendRecF,
-                gamma = gamma,
-                alpha = alpha
+            val srgbEdgeBlendConfig = ImageRenderer.SrgbEdgeBlendConfig(
+                rect = blendRecF,
+                alpha = alpha,
+                mode = when (currentDisplayMode) {
+                    leftHalf -> ImageRenderer.BlendMode.RIGHT_EDGE
+                    rightHalf -> ImageRenderer.BlendMode.LEFT_EDGE
+                    else -> ImageRenderer.BlendMode.NONE
+                }
             )
+            imageRenderer?.configureSrgbEdgeBlending(srgbEdgeBlendConfig)
         } else {
             //videoRenderer?.setBlendRect(blendingRectF, 0.8f)
             videoRenderer?.setBlendConfig(
@@ -327,7 +331,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
 
-        private val loadIamge = false    //otherwise load video
+        private val loadIamge = true    //otherwise load video
         private val singleProjectorAspectRatio = 12f / 9f
         private val singleProjectorOverlappingRatio = 3f / 12f
     }
