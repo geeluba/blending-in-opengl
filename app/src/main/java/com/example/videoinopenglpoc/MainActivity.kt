@@ -231,12 +231,16 @@ class MainActivity : AppCompatActivity() {
             )
             imageRenderer?.configureSrgbEdgeBlending(srgbEdgeBlendConfig)
         } else {
-            videoRenderer?.setBlendConfig(
-                isLeft = currentDisplayMode == leftHalf,
-                blendRect = blendRecF,
-                gamma = gamma,
-                alpha = alpha
+            val srgbEdgeBlendConfig = VideoRenderer.SrgbEdgeBlendConfig(
+                rect = blendRecF,
+                alpha = alpha,
+                mode = when (currentDisplayMode) {
+                    leftHalf -> VideoRenderer.BlendMode.LEFT_EDGE
+                    rightHalf -> VideoRenderer.BlendMode.RIGHT_EDGE
+                    else -> VideoRenderer.BlendMode.NONE
+                }
             )
+            videoRenderer?.configureSrgbEdgeBlending(srgbEdgeBlendConfig)
         }
         Log.d(TAG, "blendingRectF=$blendRecF")
         Log.d(TAG, "addRenderView---")

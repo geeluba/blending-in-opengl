@@ -22,6 +22,19 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
 
     private val TAG = "===rode===VideoRenderer"
 
+    // Edge blending configuration (simplified)
+    data class SrgbEdgeBlendConfig(
+        val rect: RectF,
+        val alpha: Float = 0.5f,
+        val mode: BlendMode = BlendMode.NONE
+    )
+
+    enum class BlendMode(val value: Int) {
+        NONE(0),
+        LEFT_EDGE(1),
+        RIGHT_EDGE(2)
+    }
+
     private lateinit var surfaceTexture: SurfaceTexture
     var mediaPlayer: MediaPlayer? = null
 
@@ -78,7 +91,7 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
     // --- NEW PROPERTIES FOR BLENDING ---
     private var uBlendRectLocation: Int = 0
     private var uIsLeftLocation: Int = 0
-    private var uGammaLocation: Int = 0
+    private var uBlendInvWidthLocation: Int = 0
     private var uAlphaLocation: Int = 0
 
     // (minX, minY, maxX, maxY) in normalized screen coordinates (Y is up)
@@ -95,6 +108,9 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
     private var pendingBlendGamma: Float = 1.0f
     private var isLeft: Boolean = true
     private var pendingisLeft: Boolean = true
+
+    private var precomputedInvWidth = 0f
+    private var pendingSrgbEdgeBlendConfig: SrgbEdgeBlendConfig? = null
 
     init {
         vertexBuffer = ByteBuffer.allocateDirect(vertices.size * 4)
@@ -194,9 +210,9 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         uMVPMatrixLocation = GLES20.glGetUniformLocation(programHandle, "uMVPMatrix")
         uTexMatrixLocation = GLES20.glGetUniformLocation(programHandle, "uTexMatrix")
         sTextureLocation = GLES20.glGetUniformLocation(programHandle, "sTexture")
-        uIsLeftLocation = GLES20.glGetUniformLocation(programHandle, "uIsLeft")
+        uIsLeftLocation = GLES20.glGetUniformLocation(programHandle, "uIsLeftFlag")
         uBlendRectLocation = GLES20.glGetUniformLocation(programHandle, "uBlendRect")
-        uGammaLocation = GLES20.glGetUniformLocation(programHandle, "uGamma")
+        uBlendInvWidthLocation = GLES20.glGetUniformLocation(programHandle, "uBlendInvWidth")
         uAlphaLocation = GLES20.glGetUniformLocation(programHandle, "uAlpha")
         uResolutionLocation = GLES20.glGetUniformLocation(programHandle, "uResolution")
 
@@ -277,11 +293,10 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
             targetRect.set(0f, 0f, width.toFloat(), height.toFloat())
         }
 
-       isSurfaceReady = true
-        if (pendingBlendRect != null) {
-            updateBlendConfig(pendingisLeft, pendingBlendRect!!, pendingBlendGamma, pendingBlendAlpha)
-            // Clear the pending request so it doesn't get applied again
-            pendingBlendRect = null
+        isSurfaceReady = true
+        if (pendingSrgbEdgeBlendConfig != null) {
+            updateSrgbEdgeBlendConfig(pendingSrgbEdgeBlendConfig!!)
+            pendingSrgbEdgeBlendConfig = null
         }
 
         // 更新 MVP 矩陣
@@ -326,9 +341,9 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
 
         // --- Pass blending uniforms to the shader ---
         GLES20.glUniform2fv(uResolutionLocation, 1, resolution, 0)
-        GLES20.glUniform1i(uIsLeftLocation, if (isLeft) 1 else 0)
+        GLES20.glUniform1f(uIsLeftLocation, if (isLeft) 1f else 0f)
+        GLES20.glUniform1f(uBlendInvWidthLocation, precomputedInvWidth)
         GLES20.glUniform4fv(uBlendRectLocation, 1, blendRectNormalized, 0)
-        GLES20.glUniform1f(uGammaLocation, blendGamma)
         GLES20.glUniform1f(uAlphaLocation, blendAlpha)
 
         // 綁定紋理
@@ -387,37 +402,46 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         return program
     }
 
+    // Backward compatibility method with sRGB handling
     fun setBlendConfig(isLeft: Boolean, blendRect: RectF, gamma: Float, alpha: Float) {
+        // Note: gamma parameter is ignored as we use fixed sRGB conversion
+        val mode = if (isLeft) BlendMode.RIGHT_EDGE else BlendMode.LEFT_EDGE
+        val config = SrgbEdgeBlendConfig(blendRect, alpha, mode)
+        configureSrgbEdgeBlending(config)
+    }
+
+
+    // New sRGB-aware edge blending configuration
+    fun configureSrgbEdgeBlending(config: SrgbEdgeBlendConfig) {
         if (!isSurfaceReady) {
-            Log.d(TAG, "Surface not ready, caching blend rect request")
-            // Create a copy of the rect to avoid threading issues
-            pendingBlendRect = if (blendRect != null) RectF(blendRect) else null
-            pendingBlendAlpha = alpha
-            pendingBlendGamma = gamma
-            pendingisLeft = isLeft
+            pendingSrgbEdgeBlendConfig = config
             return
         }
 
-        // If the surface IS ready, queue the event to run on the GL thread as before.
         glSurfaceView.queueEvent {
-            updateBlendConfig(isLeft, blendRect, gamma, alpha)
+            updateSrgbEdgeBlendConfig(config)
             glSurfaceView.requestRender()
         }
     }
 
-    private fun updateBlendConfig(isLeft: Boolean, blendRect: RectF, gamma: Float, alpha: Float) {
-        glSurfaceView.queueEvent {
-            this.isLeft = isLeft
-            this.blendGamma = gamma
-            this.blendAlpha = alpha
-            if (viewWidth > 0 && viewHeight > 0) {
-                blendRectNormalized[0] = blendRect.left / viewWidth
-                blendRectNormalized[1] = 1.0f - blendRect.bottom / viewHeight
-                blendRectNormalized[2] = blendRect.right / viewWidth
-                blendRectNormalized[3] = 1.0f - blendRect.top / viewHeight
-            }
-            glSurfaceView.requestRender()
+    private fun updateSrgbEdgeBlendConfig(config: SrgbEdgeBlendConfig) {
+        if (viewWidth == 0 || viewHeight == 0) return
+        blendRectNormalized[0] = config.rect.left / viewWidth
+        blendRectNormalized[1] = 1f - config.rect.bottom / viewHeight
+        blendRectNormalized[2] = config.rect.right / viewWidth
+        blendRectNormalized[3] = 1f - config.rect.top / viewHeight
+        val widthN = blendRectNormalized[2] - blendRectNormalized[0]
+        // 避免除零
+        val inv = if (widthN > 0f) 1f / widthN else 0f
+        precomputedInvWidth = inv
+        blendAlpha = config.alpha
+        isLeft = when (config.mode) {
+            BlendMode.LEFT_EDGE -> true
+            BlendMode.RIGHT_EDGE -> false
+            else -> true
         }
+        Log.d(TAG, "Updated blend config: rect=${config.rect}, alpha=${config.alpha}, mode=${config.mode}")
+        Log.d(TAG, "isLeft=$isLeft, precomputedInvWidth=$precomputedInvWidth")
     }
 
     fun cleanup() {
