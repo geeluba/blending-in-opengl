@@ -47,6 +47,8 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
 
     private var uIsLeftLocation: Int = 0
 
+    private var uBlendInvWidthLocation: Int = 0
+
     // Buffers for vertex and texture coordinates
     private val vertexBuffer: FloatBuffer
     private val texCoordBuffer: FloatBuffer
@@ -91,11 +93,10 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
 
     @Volatile
     private var isSurfaceReady = false
-    private var pendingBlendRect: RectF? = null
     private var blendAlpha = 1.0f
-    private var pendingBlendAlpha: Float = 1.0f
     private var isLeft: Boolean = true
-    private var pendingisLeft: Boolean = true
+
+    private var precomputedInvWidth = 0f
 
     private var pendingSrgbEdgeBlendConfig: SrgbEdgeBlendConfig? = null
 
@@ -170,8 +171,9 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
         aTexCoordLocation = GLES20.glGetAttribLocation(programHandle, "aTexCoord")
         uMVPMatrixLocation = GLES20.glGetUniformLocation(programHandle, "uMVPMatrix")
         sTextureLocation = GLES20.glGetUniformLocation(programHandle, "sTexture")
-        uIsLeftLocation = GLES20.glGetUniformLocation(programHandle, "uIsLeft")
+        uIsLeftLocation = GLES20.glGetUniformLocation(programHandle, "uIsLeftFlag")
         uBlendRectLocation = GLES20.glGetUniformLocation(programHandle, "uBlendRect")
+        uBlendInvWidthLocation = GLES20.glGetUniformLocation(programHandle, "uBlendInvWidth")
         uAlphaLocation = GLES20.glGetUniformLocation(programHandle, "uAlpha")
         uResolutionLocation = GLES20.glGetUniformLocation(programHandle, "uResolution")
 
@@ -184,7 +186,7 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
 
     private fun loadImageTexture() {
         // Load image from resources
-        val bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.temple)
+        val bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.tiger)
             ?: throw IOException("Failed to load image resource")
 
         imageWidth = bitmap.width
@@ -290,7 +292,9 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
 
         // Pass blending uniforms
         GLES20.glUniform2fv(uResolutionLocation, 1, resolution, 0)
-        GLES20.glUniform1i(uIsLeftLocation, if (isLeft) 1 else 0)
+        GLES20.glUniform1f(uIsLeftLocation, if (isLeft) 1f else 0f)
+        Log.d(TAG, "onDrawFrame: isLeft=$isLeft")
+        GLES20.glUniform1f(uBlendInvWidthLocation, precomputedInvWidth)
         GLES20.glUniform4fv(uBlendRectLocation, 1, blendRectNormalized, 0)
         GLES20.glUniform1f(uAlphaLocation, blendAlpha)
 
@@ -321,20 +325,22 @@ class ImageRenderer(private val context: Context, private val glSurfaceView: GLS
 
     private fun updateSrgbEdgeBlendConfig(config: SrgbEdgeBlendConfig) {
         if (viewWidth == 0 || viewHeight == 0) return
-
-        // Update blend rectangle
         blendRectNormalized[0] = config.rect.left / viewWidth
-        blendRectNormalized[1] = 1.0f - config.rect.bottom / viewHeight
+        blendRectNormalized[1] = 1f - config.rect.bottom / viewHeight
         blendRectNormalized[2] = config.rect.right / viewWidth
-        blendRectNormalized[3] = 1.0f - config.rect.top / viewHeight
-
-        // Update parameters
+        blendRectNormalized[3] = 1f - config.rect.top / viewHeight
+        val widthN = blendRectNormalized[2] - blendRectNormalized[0]
+        // 避免除零
+        val inv = if (widthN > 0f) 1f / widthN else 0f
+        precomputedInvWidth = inv
         blendAlpha = config.alpha
         isLeft = when (config.mode) {
-            BlendMode.LEFT_EDGE -> false  // Right projector blending left edge
-            BlendMode.RIGHT_EDGE -> true  // Left projector blending right edge
+            BlendMode.LEFT_EDGE -> true
+            BlendMode.RIGHT_EDGE -> false
             else -> true
         }
+        Log.d(TAG, "Updated blend config: rect=${config.rect}, alpha=${config.alpha}, mode=${config.mode}")
+        Log.d(TAG, "isLeft=$isLeft, precomputedInvWidth=$precomputedInvWidth")
     }
 
 

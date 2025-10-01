@@ -219,8 +219,8 @@ class MainActivity : AppCompatActivity() {
                 rect = blendRecF,
                 alpha = alpha,
                 mode = when (currentDisplayMode) {
-                    leftHalf -> ImageRenderer.BlendMode.RIGHT_EDGE
-                    rightHalf -> ImageRenderer.BlendMode.LEFT_EDGE
+                    leftHalf -> ImageRenderer.BlendMode.LEFT_EDGE
+                    rightHalf -> ImageRenderer.BlendMode.RIGHT_EDGE
                     else -> ImageRenderer.BlendMode.NONE
                 }
             )
