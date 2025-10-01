@@ -72,7 +72,7 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         DisplayMode.None -> {
-
+                            removeRenderView()
                         }
                     }
 
@@ -133,8 +133,7 @@ class MainActivity : AppCompatActivity() {
                     else -> 0f
                 }
             }
-            gv.y = (screenHeight - availableHeight).toFloat()
-            gv.y = (screenHeight - availableHeight).toFloat()
+            gv.y = (screenHeight - availableHeight).toFloat() / 2f // Center vertically
             //tried below, seems not necessary
             //gv.background = ColorDrawable(android.graphics.Color.TRANSPARENT)
             //gv.background = null
@@ -151,56 +150,63 @@ class MainActivity : AppCompatActivity() {
                     else -> 0f
                 }
             }
-            fl.y = (screenHeight - availableHeight).toFloat()
+            fl.y = (screenHeight - availableHeight).toFloat() / 2f // Center vertically
             fl.background = getDrawable(R.drawable.rectangular_frame)
         }
 
-        //compute the virtual combined rectF
+        // --- CORRECTED CALCULATION for virtualCombinedRectF ---
+        // The goal is to define a targetRect that, when processed by the renderer's
+        // updateMVPMatrix function, results in the correct scaling and translation
+        // to show only the relevant portion of the full image.
         val overlappingWidth = getOverlappingWidth(availableWidth)
-        Log.d(TAG, "overlappingWidth=$overlappingWidth")
-        val totalWidth = availableWidth * 2 - overlappingWidth
-        virtualCombinedRectF = RectF(
-            currentDisplayMode.let {
-                when (it) {
-                    leftHalf -> 0f - overlappingWidth / 2
-                    else -> 0f - totalWidth / 2f + overlappingWidth / 2
-                }
-            },
-            0f,
-            currentDisplayMode.let {
-                when (it) {
-                    leftHalf -> totalWidth.toFloat() + overlappingWidth / 2f
-                    else -> totalWidth / 2f + overlappingWidth / 2f
-                }
-            },
-            availableHeight.toFloat()
-        )
-        Log.d(TAG, "virtualCombinedRectF=$virtualCombinedRectF")
+        val totalWidth = (availableWidth * 2 - overlappingWidth).toFloat()
+        Log.d(TAG, "totalWidth=$totalWidth, overlappingWidth=$overlappingWidth")
+
+        // We work backwards from the required matrix transformation:
+        // 1. The required horizontal scale is (totalWidth / availableWidth).
+        //    The renderer calculates scale as `targetRect.width() / availableWidth`.
+        //    Therefore, `targetRect.width()` must be `totalWidth`.
+        //
+        // 2. The required horizontal translation is different for left and right projectors.
+        //    The renderer calculates translation based on `targetRect.centerX()`.
+        //    We can calculate the `centerX` needed to produce the correct translation.
+        virtualCombinedRectF = when (currentDisplayMode) {
+            leftHalf -> {
+                // For the left projector, we need to shift the scaled image to the right
+                // so that its left edge aligns with the screen's left edge.
+                // This requires a centerX of `totalWidth / 2f`.
+                val centerX = totalWidth / 2f
+                RectF(centerX - totalWidth / 2f, 0f, centerX + totalWidth / 2f, availableHeight.toFloat())
+            }
+            rightHalf -> {
+                // For the right projector, we need to shift the scaled image to the left
+                // so its right edge aligns with the screen's right edge.
+                // This requires a centerX of `availableWidth - (totalWidth / 2f)`.
+                val centerX = availableWidth - (totalWidth / 2f)
+                val left = centerX - totalWidth / 2f
+                val right = centerX + totalWidth / 2f
+                RectF(left, 0f, right, availableHeight.toFloat())
+            }
+            else -> {
+                // Default case for 'None'
+                RectF(0f, 0f, availableWidth.toFloat(), availableHeight.toFloat())
+            }
+        }
+
+        Log.d(TAG, "virtualCombinedRectF for $currentDisplayMode is $virtualCombinedRectF")
+
         if (loadIamge) {
             imageRenderer?.setImageRect(virtualCombinedRectF)
         } else {
             videoRenderer?.setVideoRect(virtualCombinedRectF)
         }
 
-        //testing area for blending (center)
-        /*val rectWidth = availableWidth / 2f
-        val rectHeight = availableHeight / 2f
-
-        val rectLeft = (availableWidth - rectWidth) / 2f
-        val rectTop = (availableHeight - rectHeight) / 2f
-
-        val blendingRectF = RectF(
-            rectLeft,
-            rectTop,
-            rectLeft + rectWidth,
-            rectTop + rectHeight
-        )*/
 
         val gamma = 2.2f
         val alpha = 1.0f
 
         //overlapping area on screen
-        var blendRecF = RectF(
+        val blendRecF = RectF(
             when (currentDisplayMode) {
                 leftHalf -> (availableWidth - overlappingWidth) * 1f
                 else -> 0f
@@ -214,7 +220,6 @@ class MainActivity : AppCompatActivity() {
         )
 
         if (loadIamge) {
-            imageRenderer?.setImageRect(virtualCombinedRectF)
             imageRenderer?.setBlendConfig(
                 isLeft = currentDisplayMode == leftHalf,
                 blendRect = blendRecF,
@@ -222,7 +227,6 @@ class MainActivity : AppCompatActivity() {
                 alpha = alpha
             )
         } else {
-            //videoRenderer?.setBlendRect(blendingRectF, 0.8f)
             videoRenderer?.setBlendConfig(
                 isLeft = currentDisplayMode == leftHalf,
                 blendRect = blendRecF,
@@ -315,20 +319,23 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        glSurfaceView?.onPause()
     }
 
     override fun onResume() {
         super.onResume()
+        glSurfaceView?.onResume()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        removeRenderView()
     }
 
     companion object {
 
-        private val loadIamge = false    //otherwise load video
-        private val singleProjectorAspectRatio = 12f / 9f
-        private val singleProjectorOverlappingRatio = 3f / 12f
+        private const val loadIamge = false    //otherwise load video
+        private const val singleProjectorAspectRatio = 12f / 9f
+        private const val singleProjectorOverlappingRatio = 3f / 12f
     }
 }
