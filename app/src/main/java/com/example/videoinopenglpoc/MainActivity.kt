@@ -201,8 +201,6 @@ class MainActivity : AppCompatActivity() {
             videoRenderer?.setVideoRect(virtualCombinedRectF)
         }
 
-
-        val gamma = 2.2f
         val alpha = 1.0f
 
         //overlapping area on screen
@@ -234,7 +232,6 @@ class MainActivity : AppCompatActivity() {
             videoRenderer?.setBlendConfig(
                 isLeft = currentDisplayMode == leftHalf,
                 blendRect = blendRecF,
-                gamma = gamma,
                 alpha = alpha
             )
         }
@@ -337,7 +334,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val loadIamge = true    //otherwise load video
+        private const val loadIamge = false    //otherwise load video
         private const val singleProjectorAspectRatio = 12f / 9f
         private const val singleProjectorOverlappingRatio = 3f / 12f
     }

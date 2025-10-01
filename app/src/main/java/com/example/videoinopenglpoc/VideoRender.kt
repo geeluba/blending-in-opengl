@@ -78,7 +78,6 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
     // --- NEW PROPERTIES FOR BLENDING ---
     private var uBlendRectLocation: Int = 0
     private var uIsLeftLocation: Int = 0
-    private var uGammaLocation: Int = 0
     private var uAlphaLocation: Int = 0
 
     // (minX, minY, maxX, maxY) in normalized screen coordinates (Y is up)
@@ -91,8 +90,6 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
     private var pendingBlendRect: RectF? = null
     private var blendAlpha = 1.0f
     private var pendingBlendAlpha: Float = 1.0f
-    private var blendGamma: Float = 1.0f
-    private var pendingBlendGamma: Float = 1.0f
     private var isLeft: Boolean = true
     private var pendingisLeft: Boolean = true
 
@@ -196,7 +193,6 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         sTextureLocation = GLES20.glGetUniformLocation(programHandle, "sTexture")
         uIsLeftLocation = GLES20.glGetUniformLocation(programHandle, "uIsLeft")
         uBlendRectLocation = GLES20.glGetUniformLocation(programHandle, "uBlendRect")
-        uGammaLocation = GLES20.glGetUniformLocation(programHandle, "uGamma")
         uAlphaLocation = GLES20.glGetUniformLocation(programHandle, "uAlpha")
         uResolutionLocation = GLES20.glGetUniformLocation(programHandle, "uResolution")
 
@@ -279,7 +275,7 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
 
        isSurfaceReady = true
         if (pendingBlendRect != null) {
-            updateBlendConfig(pendingisLeft, pendingBlendRect!!, pendingBlendGamma, pendingBlendAlpha)
+            updateBlendConfig(pendingisLeft, pendingBlendRect!!, pendingBlendAlpha)
             // Clear the pending request so it doesn't get applied again
             pendingBlendRect = null
         }
@@ -328,7 +324,6 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         GLES20.glUniform2fv(uResolutionLocation, 1, resolution, 0)
         GLES20.glUniform1i(uIsLeftLocation, if (isLeft) 1 else 0)
         GLES20.glUniform4fv(uBlendRectLocation, 1, blendRectNormalized, 0)
-        GLES20.glUniform1f(uGammaLocation, blendGamma)
         GLES20.glUniform1f(uAlphaLocation, blendAlpha)
 
         // 綁定紋理
@@ -387,28 +382,26 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         return program
     }
 
-    fun setBlendConfig(isLeft: Boolean, blendRect: RectF, gamma: Float, alpha: Float) {
+    fun setBlendConfig(isLeft: Boolean, blendRect: RectF, alpha: Float) {
         if (!isSurfaceReady) {
             Log.d(TAG, "Surface not ready, caching blend rect request")
             // Create a copy of the rect to avoid threading issues
             pendingBlendRect = if (blendRect != null) RectF(blendRect) else null
             pendingBlendAlpha = alpha
-            pendingBlendGamma = gamma
             pendingisLeft = isLeft
             return
         }
 
         // If the surface IS ready, queue the event to run on the GL thread as before.
         glSurfaceView.queueEvent {
-            updateBlendConfig(isLeft, blendRect, gamma, alpha)
+            updateBlendConfig(isLeft, blendRect, alpha)
             glSurfaceView.requestRender()
         }
     }
 
-    private fun updateBlendConfig(isLeft: Boolean, blendRect: RectF, gamma: Float, alpha: Float) {
+    private fun updateBlendConfig(isLeft: Boolean, blendRect: RectF, alpha: Float) {
         glSurfaceView.queueEvent {
             this.isLeft = isLeft
-            this.blendGamma = gamma
             this.blendAlpha = alpha
             if (viewWidth > 0 && viewHeight > 0) {
                 blendRectNormalized[0] = blendRect.left / viewWidth
