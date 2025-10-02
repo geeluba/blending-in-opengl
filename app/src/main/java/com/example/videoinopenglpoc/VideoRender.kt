@@ -17,10 +17,15 @@ import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
-class VideoRenderer(private val context: Context, private val glSurfaceView: GLSurfaceView) :
+class VideoRenderer(private val context: Context, private val glSurfaceView: GLSurfaceView,
+                    private val callback: VideoCallback? = null) :
     GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
 
     private val TAG = "===rode===VideoRenderer"
+
+    interface VideoCallback {
+        fun onVideoReady()
+    }
 
     private lateinit var surfaceTexture: SurfaceTexture
     var mediaPlayer: MediaPlayer? = null
@@ -254,6 +259,7 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
                 glSurfaceView.queueEvent { updateMVPMatrix() }
 
                 mp.start()
+                callback?.onVideoReady()
             }
         } catch (e: IOException) {
             Log.e("VideoRenderer", "MediaPlayer setup failed", e)
@@ -428,5 +434,23 @@ class VideoRenderer(private val context: Context, private val glSurfaceView: GLS
         if (programHandle != 0) GLES20.glDeleteProgram(programHandle)
         videoTextureId = 0
         programHandle = 0
+    }
+
+    fun play() {
+        Log.d(TAG, "video play+++")
+        if (mediaPlayer == null) {
+            return
+        }
+        mediaPlayer?.start()
+        Log.d(TAG, "video play---")
+    }
+
+    fun pause() {
+        Log.d(TAG, "video pause+++")
+        if (mediaPlayer == null) {
+            return
+        }
+        mediaPlayer?.pause()
+        Log.d(TAG, "video pause---")
     }
 }

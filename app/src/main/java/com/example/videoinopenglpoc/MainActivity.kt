@@ -8,9 +8,11 @@ import android.os.Bundle
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
+import android.view.Gravity
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.FrameLayout
+import androidx.constraintlayout.widget.ConstraintLayout
 import com.example.videoinopenglpoc.MainActivity.DisplayMode.leftHalf
 import com.example.videoinopenglpoc.MainActivity.DisplayMode.rightHalf
 import com.example.videoinopenglpoc.databinding.ActivityMainBinding
@@ -44,6 +46,9 @@ class MainActivity : AppCompatActivity() {
         hideSystemUi()
 
         initSpinner()
+
+        initButton()
+
     }
 
     private fun initSpinner() {
@@ -69,6 +74,9 @@ class MainActivity : AppCompatActivity() {
                         leftHalf, rightHalf -> {
                             removeRenderView()
                             addRenderView()
+                            if (!loadIamge) {
+                                binding.playButton.requestFocus()
+                            }
                         }
 
                         DisplayMode.None -> {
@@ -82,6 +90,14 @@ class MainActivity : AppCompatActivity() {
                     // Do nothing
                 }
             }
+    }
+
+    private fun initButton() {
+        binding.playButton.setOnClickListener {
+            Log.d(TAG, "playButton clicked")
+            binding.playButton.visibility = View.INVISIBLE
+            videoRenderer?.play()
+        }
     }
 
     private fun addRenderView() {
@@ -103,7 +119,47 @@ class MainActivity : AppCompatActivity() {
             glSurfaceView?.setRenderer(imageRenderer)
             glSurfaceView?.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
         } else {
-            videoRenderer = VideoRenderer(this, glSurfaceView!!)
+            videoRenderer = VideoRenderer(this, glSurfaceView!!,
+                object  : VideoRenderer.VideoCallback {
+                    override fun onVideoReady() {
+                        runOnUiThread {
+                            Log.d(TAG, "onVideoReady: play button enabled")
+                            binding.playButton.isEnabled = true
+                            when (currentDisplayMode) {
+                                leftHalf -> {
+                                    runOnUiThread {
+                                        binding.playButton.visibility = View.VISIBLE
+                                        val params = ConstraintLayout.LayoutParams(
+                                            ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                                            ConstraintLayout.LayoutParams.WRAP_CONTENT
+                                        )
+                                        params.startToStart =
+                                            ConstraintLayout.LayoutParams.PARENT_ID
+                                        params.bottomToBottom =
+                                            ConstraintLayout.LayoutParams.PARENT_ID
+                                        binding.playButton.layoutParams = params
+                                        videoRenderer?.pause()
+                                    }
+                                }
+                                rightHalf -> {
+                                    runOnUiThread {
+                                        binding.playButton.visibility = View.VISIBLE
+                                        val params = ConstraintLayout.LayoutParams(
+                                            ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                                            ConstraintLayout.LayoutParams.WRAP_CONTENT
+                                        )
+                                        params.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+                                        params.bottomToBottom =
+                                            ConstraintLayout.LayoutParams.PARENT_ID
+                                        binding.playButton.layoutParams = params
+                                        videoRenderer?.pause()
+                                    }
+                                }
+                                else -> binding.playButton.text = "Play Video"
+                            }
+                        }
+                    }
+                })
             glSurfaceView?.setRenderer(videoRenderer)
             glSurfaceView?.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
         }
@@ -151,7 +207,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             fl.y = (screenHeight - availableHeight).toFloat() / 2f // Center vertically
-            fl.background = getDrawable(R.drawable.rectangular_frame)
+            //fl.background = getDrawable(R.drawable.rectangular_frame)
         }
 
         // --- CORRECTED CALCULATION for virtualCombinedRectF ---
@@ -334,7 +390,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
 
-        private const val loadIamge = true    //otherwise load video
+        private const val loadIamge = false    //otherwise load video
         private const val singleProjectorAspectRatio = 12f / 9f
         private const val singleProjectorOverlappingRatio = 3f / 12f
     }
