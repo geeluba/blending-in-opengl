@@ -11,6 +11,8 @@ uniform float uGamma;
 uniform float uAlpha;
 uniform vec2 uResolution;     // View resolution (width, height)
 
+const float PI = 3.14159265359;
+
 void main() {
     vec4 textureColor = texture2D(sTexture, vTexCoord);
     float blendFactor = 1.0;
@@ -23,15 +25,19 @@ void main() {
     bool inRectY = normalizedScreenCoord.y >= uBlendRect.y && normalizedScreenCoord.y <= uBlendRect.w;
 
     if (uBlendRect.z > uBlendRect.x && inRectX && inRectY) {
-        // Calculate the blend factor based on horizontal position within the rect
+        // --- MODIFIED FOR EQUAL-POWER BLENDING ---
+        // Calculate the position within the blend rect (0.0 to 1.0)
         float horizontalPosInRect = (normalizedScreenCoord.x - uBlendRect.x) / (uBlendRect.z - uBlendRect.x);
 
+        // Convert the linear position to an angle from 0 to PI/2
+        float theta = horizontalPosInRect * PI / 2.0;
+
         if (uIsLeft) {
-            // Left projector: fade from 1.0 down to 0.0 across the blend rect
-            blendFactor = 1.0 - horizontalPosInRect;
+            // Left projector: fade using a cosine curve for a smooth, perceptually linear falloff.
+            blendFactor = cos(theta);
         } else {
-            // Right projector: fade from 0.0 up to 1.0 across the blend rect
-            blendFactor = horizontalPosInRect;
+            // Right projector: fade using a sine curve.
+            blendFactor = sin(theta);
         }
     }
 
@@ -45,5 +51,5 @@ void main() {
     vec3 finalGammaColor = pow(blendedLinearColor, vec3(1.0 / uGamma));
 
     // 4. Apply final alpha
-    gl_FragColor = vec4(finalGammaColor, textureColor.a * blendFactor * uAlpha);
+    gl_FragColor = vec4(finalGammaColor, textureColor.a * uAlpha);
 }
