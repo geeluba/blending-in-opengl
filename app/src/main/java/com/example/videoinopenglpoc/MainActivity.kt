@@ -334,7 +334,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
 
-        private const val loadIamge = false    //otherwise load video
+        private const val loadIamge = true    //otherwise load video
         private const val singleProjectorAspectRatio = 12f / 9f
         private const val singleProjectorOverlappingRatio = 3f / 12f
     }
